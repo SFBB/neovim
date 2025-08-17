@@ -29,7 +29,7 @@
 --- on EVERY keypress you can either:
 --- - Extend `client.server_capabilities.completionProvider.triggerCharacters` on `LspAttach`,
 ---   before you call `vim.lsp.completion.enable(… {autotrigger=true})`. See the |lsp-attach| example.
---- - Call `vim.lsp.completion.get()` from the handler described at |compl-autocomplete|.
+--- - Call `vim.lsp.completion.get()` from an |InsertCharPre| autocommand.
 
 local M = {}
 
@@ -430,6 +430,8 @@ function M._convert_results(
   return matches, server_start_boundary
 end
 
+-- NOTE: The reason we don't use `lsp.buf_request_all` here is because we want to filter the clients
+-- that received the request based on the trigger characters.
 --- @param clients table<integer, vim.lsp.Client> # keys != client_id
 --- @param bufnr integer
 --- @param win integer

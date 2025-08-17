@@ -952,6 +952,12 @@ describe('completion', function()
     end
   end)
 
+  it('cmdline completion for :restart', function()
+    eq('qall', fn.getcompletion('restart +qa', 'cmdline')[1])
+    eq('edit', fn.getcompletion('restart +qall ed', 'cmdline')[1])
+    eq('edit', fn.getcompletion('restart ed', 'cmdline')[1])
+  end)
+
   describe('from the commandline window', function()
     it('is cleared after CTRL-C', function()
       feed('q:')
@@ -1371,6 +1377,36 @@ describe('completion', function()
       {4:f}{1:                                                           }|
       {1:~                                                           }|*5
       {5:-- Keyword completion (^N^P) The only match}                 |
+    ]])
+  end)
+
+  -- oldtest: Test_shortmess()
+  it('shortmess+=c turns off completion messages', function()
+    command('set ruler')
+    command([[call setline(1, ['hello', 'hullo', 'heee'])]])
+    feed('Goh<C-N>')
+    screen:expect([[
+      hello                                                       |
+      hullo                                                       |
+      heee                                                        |
+      hello^                                                       |
+      {12:hello          }{1:                                             }|
+      {4:hullo          }{1:                                             }|
+      {4:heee           }{1:                                             }|
+      {5:-- Keyword completion (^N^P) }{6:match 1 of 3}                   |
+    ]])
+    feed('<Esc>')
+    command('set shm+=c')
+    feed('Sh<C-N>')
+    screen:expect([[
+      hello                                                       |
+      hullo                                                       |
+      heee                                                        |
+      hello^                                                       |
+      {12:hello          }{1:                                             }|
+      {4:hullo          }{1:                                             }|
+      {4:heee           }{1:                                             }|
+      {5:-- INSERT --}                              4,6           All |
     ]])
   end)
 end)

@@ -69,9 +69,7 @@ typedef enum {
   kDict2ListItems,   ///< List dictionary contents: [keys, values].
 } DictListType;
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "eval/typval.c.generated.h"
-#endif
+#include "eval/typval.c.generated.h"
 
 static const char e_variable_nested_too_deep_for_unlock[]
   = N_("E743: Variable nested too deep for (un)lock");
@@ -190,7 +188,7 @@ void tv_list_watch_remove(list_T *const l, listwatch_T *const lwrem)
 ///
 /// @param[out]  l  List from which item is removed.
 /// @param[in]  item  List item being removed.
-void tv_list_watch_fix(list_T *const l, const listitem_T *const item)
+static void tv_list_watch_fix(list_T *const l, const listitem_T *const item)
   FUNC_ATTR_NONNULL_ALL
 {
   for (listwatch_T *lw = l->lv_watch; lw != NULL; lw = lw->lw_next) {

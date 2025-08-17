@@ -135,9 +135,7 @@ enum {
   EDIT_QF = 4,     // start in quickfix mode
 };
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "main.c.generated.h"
-#endif
+#include "main.c.generated.h"
 
 Loop main_loop;
 
@@ -809,6 +807,17 @@ void getout(int exitval)
     ui_call_set_title(cstr_as_string(p_titleold));
   }
 
+  if (restarting) {
+    Error err = ERROR_INIT;
+    if (!remote_ui_restart(current_ui, &err)) {
+      if (ERROR_SET(&err)) {
+        ELOG("%s", err.msg);  // UI disappeared already?
+        api_clear_error(&err);
+      }
+    }
+    restarting = false;
+  }
+
   if (garbage_collect_at_exit) {
     garbage_collect(false);
   }
@@ -961,7 +970,7 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
   ADD_C(a, CSTR_AS_OBJ(connect_error));
   ADD_C(a, ARRAY_OBJ(args));
   String s = STATIC_CSTR_AS_STRING("return vim._cs_remote(...)");
-  Object o = nlua_exec(s, a, kRetObject, NULL, &err);
+  Object o = nlua_exec(s, NULL, a, kRetObject, NULL, &err);
   kv_destroy(args);
   if (ERROR_SET(&err)) {
     fprintf(stderr, "%s\n", err.msg);
@@ -2062,7 +2071,8 @@ static void do_exrc_initialization(void)
     str = nlua_read_secure(VIMRC_LUA_FILE);
     if (str != NULL) {
       Error err = ERROR_INIT;
-      nlua_exec(cstr_as_string(str), (Array)ARRAY_DICT_INIT, kRetNilBool, NULL, &err);
+      nlua_exec(cstr_as_string(str), "@"VIMRC_LUA_FILE, (Array)ARRAY_DICT_INIT, kRetNilBool, NULL,
+                &err);
       xfree(str);
       if (ERROR_SET(&err)) {
         semsg("Error in %s:", VIMRC_LUA_FILE);

@@ -23,7 +23,13 @@ do
 
   vim.api.nvim_create_user_command('EditQuery', function(cmd)
     vim.treesitter.query.edit(cmd.fargs[1])
-  end, { desc = 'Edit treesitter query', nargs = '?' })
+  end, {
+    desc = 'Edit treesitter query',
+    nargs = '?',
+    complete = function()
+      return vim.treesitter.language._complete()
+    end,
+  })
 
   vim.api.nvim_create_user_command('Open', function(cmd)
     vim.ui.open(assert(cmd.fargs[1]))
@@ -191,7 +197,7 @@ do
   --- client is attached. If no client is attached, or if a server does not support a capability, an
   --- error message is displayed rather than exhibiting different behavior.
   ---
-  --- See |grr|, |grn|, |gra|, |gri|, |gO|, |i_CTRL-S|.
+  --- See |grr|, |grn|, |gra|, |gri|, |grt| |gO|, |i_CTRL-S|.
   do
     vim.keymap.set('n', 'grn', function()
       vim.lsp.buf.rename()
@@ -208,6 +214,18 @@ do
     vim.keymap.set('n', 'gri', function()
       vim.lsp.buf.implementation()
     end, { desc = 'vim.lsp.buf.implementation()' })
+
+    vim.keymap.set('n', 'grt', function()
+      vim.lsp.buf.type_definition()
+    end, { desc = 'vim.lsp.buf.type_definition()' })
+
+    vim.keymap.set('x', 'an', function()
+      vim.lsp.buf.selection_range(vim.v.count1)
+    end, { desc = 'vim.lsp.buf.selection_range(vim.v.count1)' })
+
+    vim.keymap.set('x', 'in', function()
+      vim.lsp.buf.selection_range(-vim.v.count1)
+    end, { desc = 'vim.lsp.buf.selection_range(-vim.v.count1)' })
 
     vim.keymap.set('n', 'gO', function()
       vim.lsp.buf.document_symbol()
@@ -927,7 +945,7 @@ do
   end
 
   vim.api.nvim_create_autocmd('VimEnter', {
-    group = vim.api.nvim_create_augroup('nvim.find_exrc', {}),
+    group = vim.api.nvim_create_augroup('nvim.exrc', {}),
     desc = 'Find exrc files in parent directories',
     callback = function()
       if not vim.o.exrc then
@@ -944,7 +962,7 @@ do
         local trusted = vim.secure.read(file) --[[@as string|nil]]
         if trusted then
           if vim.endswith(file, '.lua') then
-            assert(loadstring(trusted))()
+            assert(loadstring(trusted, '@' .. file))()
           else
             vim.api.nvim_exec2(trusted, {})
           end

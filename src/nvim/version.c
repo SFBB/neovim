@@ -53,9 +53,7 @@ char *version_buildtype = "Build type: " NVIM_VERSION_BUILD_TYPE;
 char *version_cflags = "Compilation: " NVIM_VERSION_CFLAGS;
 #endif
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "version.c.generated.h"
-#endif
+#include "version.c.generated.h"
 
 // clang-format off
 static const int included_patches[] = {
@@ -283,7 +281,7 @@ static const int included_patches[] = {
   2203,
   2202,
   2201,
-  // 2200,
+  2200,
   2199,
   2198,
   2197,
@@ -356,7 +354,7 @@ static const int included_patches[] = {
   2130,
   2129,
   2128,
-  // 2127,
+  2127,
   2126,
   2125,
   2124,
@@ -592,7 +590,7 @@ static const int included_patches[] = {
   1894,
   1893,
   // 1892,
-  // 1891,
+  1891,
   1890,
   1889,
   1888,
@@ -630,7 +628,7 @@ static const int included_patches[] = {
   1856,
   1855,
   1854,
-  // 1853,
+  1853,
   1852,
   // 1851,
   // 1850,
@@ -681,7 +679,7 @@ static const int included_patches[] = {
   1805,
   1804,
   1803,
-  // 1802,
+  1802,
   1801,
   1800,
   // 1799,
@@ -747,15 +745,15 @@ static const int included_patches[] = {
   1739,
   1738,
   1737,
-  // 1736,
+  1736,
   1735,
   1734,
   // 1733,
   1732,
   1731,
-  // 1730,
+  1730,
   1729,
-  // 1728,
+  1728,
   1727,
   1726,
   1725,
@@ -780,7 +778,7 @@ static const int included_patches[] = {
   1706,
   1705,
   1704,
-  // 1703,
+  1703,
   1702,
   1701,
   // 1700,
@@ -842,7 +840,7 @@ static const int included_patches[] = {
   1644,
   1643,
   1642,
-  // 1641,
+  1641,
   1640,
   1639,
   1638,
@@ -854,7 +852,7 @@ static const int included_patches[] = {
   1632,
   1631,
   1630,
-  // 1629,
+  1629,
   // 1628,
   1627,
   // 1626,
@@ -899,7 +897,7 @@ static const int included_patches[] = {
   1587,
   // 1586,
   1585,
-  // 1584,
+  1584,
   1583,
   1582,
   1581,
@@ -918,7 +916,7 @@ static const int included_patches[] = {
   1568,
   1567,
   1566,
-  // 1565,
+  1565,
   1564,
   1563,
   // 1562,
@@ -932,7 +930,7 @@ static const int included_patches[] = {
   1554,
   // 1553,
   1552,
-  // 1551,
+  1551,
   // 1550,
   1549,
   // 1548,
@@ -957,7 +955,7 @@ static const int included_patches[] = {
   1529,
   1528,
   // 1527,
-  // 1526,
+  1526,
   // 1525,
   1524,
   // 1523,
@@ -1479,7 +1477,7 @@ static const int included_patches[] = {
   1007,
   1006,
   1005,
-  // 1004,
+  1004,
   1003,
   1002,
   1001,
@@ -1506,7 +1504,7 @@ static const int included_patches[] = {
   980,
   979,
   978,
-  // 977,
+  977,
   976,
   975,
   974,
@@ -1569,7 +1567,7 @@ static const int included_patches[] = {
   917,
   916,
   915,
-  // 914,
+  914,
   913,
   912,
   911,
@@ -1626,7 +1624,7 @@ static const int included_patches[] = {
   860,
   859,
   858,
-  // 857,
+  857,
   856,
   855,
   854,
@@ -1713,7 +1711,7 @@ static const int included_patches[] = {
   773,
   772,
   771,
-  // 770,
+  770,
   769,
   // 768,
   767,
@@ -2528,6 +2526,12 @@ bool has_nvim_version(const char *const version_str)
                       && patch <= NVIM_VERSION_PATCH))));
 }
 
+int highest_patch(void)
+{
+  // this relies on the highest patch number to be the first entry
+  return included_patches[0];
+}
+
 /// Checks whether a Vim patch has been included.
 ///
 /// @param n Patch number.
@@ -2557,7 +2561,9 @@ void ex_version(exarg_T *eap)
 {
   // Ignore a ":version 9.99" command.
   if (*eap->arg == NUL) {
-    msg_putchar('\n');
+    if (!ui_has(kUIMessages)) {
+      msg_putchar('\n');
+    }
     list_version();
   }
 }
@@ -2671,19 +2677,23 @@ void list_lua_version(void)
                                 (Array)ARRAY_DICT_INIT, kRetObject, NULL, &err);
   assert(!ERROR_SET(&err));
   assert(ret.type == kObjectTypeString);
-  msg(ret.data.string.data, 0);
+  msg_puts(ret.data.string.data);
   api_free_object(ret);
 }
 
 void list_version(void)
 {
-  msg(longVersion, 0);
-  msg(version_buildtype, 0);
+  msg_ext_set_kind("list_cmd");
+  msg_puts(longVersion);
+  msg_putchar('\n');
+  msg_puts(version_buildtype);
+  msg_putchar('\n');
   list_lua_version();
 
   if (p_verbose > 0) {
 #ifndef NDEBUG
-    msg(version_cflags, 0);
+    msg_putchar('\n');
+    msg_puts(version_cflags);
 #endif
     version_msg("\n\n");
 

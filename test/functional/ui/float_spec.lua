@@ -909,6 +909,27 @@ describe('float window', function()
     eq({ 3, 3 }, { fn.winnr(), fn.win_id2win(win) })
   end)
 
+  it('no crash for unallocated relative window grid', function()
+    local win = api.nvim_open_win(0, false, { relative = 'editor', row = 0, col = 0, height = 1, width = 1 })
+    exec_lua(function()
+      vim.api.nvim_create_autocmd('CmdwinEnter', {
+        callback = function()
+          vim.api.nvim_win_set_config(win, { relative = 'win', win = 0, row = 0, col = 0 })
+          vim.api.nvim__redraw({ flush = true })
+        end,
+      })
+    end)
+    feed('q:')
+    assert_alive()
+  end)
+
+  it("no error for zero height with 'winminheight'", function()
+    local win = api.nvim_open_win(0, false, { relative = 'editor', row = 0, col = 0, height = 1, width = 1 })
+    api.nvim_set_option_value('winminheight', 0, {})
+    api.nvim_win_set_height(win, 0)
+    api.nvim_win_set_config(win, api.nvim_win_get_config(win))
+  end)
+
   local function with_ext_multigrid(multigrid)
     local screen, attrs
     before_each(function()
@@ -945,6 +966,7 @@ describe('float window', function()
         [28] = { foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGrey },
         [29] = { background = Screen.colors.Yellow1, foreground = Screen.colors.Blue4 },
         [30] = { background = Screen.colors.Grey, foreground = Screen.colors.Blue4, bold = true },
+        [31] = { foreground = Screen.colors.Grey0 },
       }
       screen:set_default_attr_ids(attrs)
     end)
@@ -1825,9 +1847,9 @@ describe('float window', function()
           grid = [[
           neeed some dummy                        |
           background text                         |
-          to sh{1: halloj! }{23:f}ect                      |
+          to sh{1: halloj! }{31:f}ect                      |
           of co{1: BORDAA  }{24:i}ng                       |
-          of bo{23:r}{24:der shado}w                        |
+          of bo{31:r}{24:der shado}w                        |
           ^                                        |
                                                   |
         ]],
@@ -6211,6 +6233,27 @@ describe('float window', function()
         test_float_mouse_no_focus()
       end)
 
+      it(':help (focusable=false, hide=true)', function()
+        n.add_builddir_to_rtp()
+        local w = curwin()
+        for _, helpcmd in ipairs({
+          'help',
+          'helpgrep api-types',
+          'lhelpgrep api-types',
+        }) do
+          command(helpcmd)
+          local badwins = {
+            api.nvim_open_win(0, false, { focusable = false, relative = 'editor', width = 1, height = 1, row = 0, col = 0 }),
+            api.nvim_open_win(0, false, { hide = true, relative = 'editor', width = 1, height = 1, row = 0, col = 0 }),
+          }
+          command('helpclose')
+          command(helpcmd)
+          eq(false, tbl_contains(badwins, curwin()))
+          command('helpclose')
+          eq(w, curwin())
+        end
+      end)
+
       it('j', function()
         feed('<c-w>ji') -- INSERT to trigger screen change
         if multigrid then
@@ -8446,6 +8489,8 @@ describe('float window', function()
         [30] = { bold = true, foreground = tonumber('0x00007f') },
         [31] = { foreground = Screen.colors.Red, blend = 80 },
         [32] = { foreground = Screen.colors.Blue1, blend = 100, bold = true },
+        [33] = { foreground = Screen.colors.Gray0, underline = true },
+        [34] = { underline = true },
       })
       insert([[
         Lorem ipsum dolor sit amet, consectetur
@@ -8459,6 +8504,7 @@ describe('float window', function()
         occaecat cupidatat non proident, sunt in culpa
         qui officia deserunt mollit anim id est
         laborum.]])
+      local curbufnr = api.nvim_get_current_buf()
       local buf = api.nvim_create_buf(false, false)
       local test_data = { 'test', '', 'popup    text' }
       api.nvim_buf_set_lines(buf, 0, -1, true, test_data)
@@ -8806,6 +8852,57 @@ describe('float window', function()
           dolor{26:│}{30:~}{26:eu fugiat null│} pariatur. Excepteur sint   |
           occae{26:│}{30:~}{26:t cupidatat no│} proident, sunt in culpa    |
           {16:^qui o}{22:└}{25:Footer}{22:─────────┘}{16:ollit anim id est           }|
+          laborum.                                          |
+                                                            |
+        ]])
+      end
+
+      -- winblend highlight with underline (but without guisp) in a floatwin. #14453
+      command('fclose | hi TestUnderLine gui=underline')
+      api.nvim_buf_add_highlight(curbufnr, -1, 'TestUnderLine', 3, 0, -1)
+      api.nvim_buf_add_highlight(curbufnr, -1, 'TestUnderLine', 4, 0, -1)
+      api.nvim_buf_set_lines(buf, 0, -1, false, {})
+      api.nvim_open_win(buf, false, { relative = 'win', row = 0, col = 0, width = 50, height = 1 })
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:--------------------------------------------------]|*8
+            [3:--------------------------------------------------]|
+          ## grid 2
+            {34:Ut enim ad minim veniam, quis nostrud}             |
+            {34:exercitation ullamco laboris nisi ut aliquip ex}   |
+            ea commodo consequat. Duis aute irure dolor in    |
+            reprehenderit in voluptate velit esse cillum      |
+            dolore eu fugiat nulla pariatur. Excepteur sint   |
+            occaecat cupidatat non proident, sunt in culpa    |
+            {16:^qui officia deserunt mollit anim id est           }|
+            laborum.                                          |
+          ## grid 3
+                                                              |
+          ## grid 5
+            {17:                                                  }|
+          ]],
+          win_pos = { [2] = { height = 8, startcol = 0, startrow = 0, width = 50, win = 1000 } },
+          float_pos = { [5] = { 1002, 'NW', 2, 0, 0, true, 50, 1, 0, 0 } },
+          win_viewport = {
+            [2] = { win = 1000, topline = 3, botline = 11, curline = 9, curcol = 0, linecount = 11, sum_scroll_delta = 3 },
+            [5] = { win = 1002, topline = 0, botline = 1, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0 },
+          },
+          win_viewport_margins = {
+            [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
+            [5] = { bottom = 0, left = 0, right = 0, top = 0, win = 1002 },
+          },
+        })
+      else
+        screen:expect([[
+          {33:Ut enim ad minim veniam, quis nostrud}{26:             }|
+          {34:exercitation ullamco laboris nisi ut aliquip ex}   |
+          ea commodo consequat. Duis aute irure dolor in    |
+          reprehenderit in voluptate velit esse cillum      |
+          dolore eu fugiat nulla pariatur. Excepteur sint   |
+          occaecat cupidatat non proident, sunt in culpa    |
+          {16:^qui officia deserunt mollit anim id est           }|
           laborum.                                          |
                                                             |
         ]])
@@ -10373,6 +10470,15 @@ describe('float window', function()
           ]],
         })
       end
+
+      command('set keymap=dvorak')
+      feed('<C-^>')
+      screen:expect_unchanged()
+
+      feed('<C-^>')
+      command('set keymap&')
+      screen:expect_unchanged()
+
       feed('<ESC>')
 
       -- Show cursor after switching to a normal window (hide=false).
@@ -10640,6 +10746,8 @@ describe('float window', function()
                                                   |
         ]])
       end
+      -- allow use with trailing bar
+      eq('hello', n.exec_capture('fclose | echo "hello"'))
     end)
 
     it('correctly placed in or above message area', function()
@@ -10847,7 +10955,16 @@ describe('float window', function()
       winid = api.nvim_open_win(buf, false, config)
       eq('┏', api.nvim_win_get_config(winid).border[1])
 
-      -- it is currently not supported.
+      command([[set winborder=+,-,+,\|,+,-,+,\|]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq('+', api.nvim_win_get_config(winid).border[1])
+
+      command([[set winborder=●,○,●,○,●,○,●,○]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq('●', api.nvim_win_get_config(winid).border[1])
+
+      eq('Vim(set):E474: Invalid argument: winborder=,,', pcall_err(command, 'set winborder=,,'))
+      eq('Vim(set):E474: Invalid argument: winborder=+,-,+,|,+,-,+,', pcall_err(command, [[set winborder=+,-,+,\|,+,-,+,]]))
       eq('Vim(set):E474: Invalid argument: winborder=custom', pcall_err(command, 'set winborder=custom'))
     end)
   end

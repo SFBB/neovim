@@ -128,9 +128,7 @@ typedef enum {
   WC_BOTTOM_RIGHT,
 } WindowCorner;
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "drawscreen.c.generated.h"
-#endif
+#include "drawscreen.c.generated.h"
 
 static bool redraw_popupmenu = false;
 static bool msg_grid_invalid = false;
@@ -255,7 +253,7 @@ void screenclear(void)
   compute_cmdrow();
   msg_row = cmdline_row;  // put cursor on last line for messages
   msg_col = 0;
-  msg_scrolled = 0;  // can't scroll back
+  msg_reset_scroll();     // can't scroll back
   msg_didany = false;
   msg_didout = false;
   if (HL_ATTR(HLF_MSG) > 0 && msg_use_grid() && msg_grid.chars) {
@@ -270,7 +268,7 @@ void screenclear(void)
 /// to be re-emitted: avoid clearing the prompt from the message grid.
 static bool cmdline_number_prompt(void)
 {
-  return !ui_has(kUIMessages) && State == MODE_CMDLINE && get_cmdline_info()->mouse_used != NULL;
+  return !ui_has(kUIMessages) && (State & MODE_CMDLINE) && get_cmdline_info()->mouse_used != NULL;
 }
 
 /// Set dimensions of the Nvim application "screen".
@@ -372,8 +370,8 @@ void screen_resize(int width, int height)
     // - in Ex mode, don't redraw anything.
     // - Otherwise, redraw right now, and position the cursor.
     if (State == MODE_ASKMORE || State == MODE_EXTERNCMD || exmode_active
-        || (State == MODE_CMDLINE && get_cmdline_info()->one_key)) {
-      if (State == MODE_CMDLINE) {
+        || ((State & MODE_CMDLINE) && get_cmdline_info()->one_key)) {
+      if (State & MODE_CMDLINE) {
         update_screen();
       }
       if (msg_grid.chars) {
@@ -500,7 +498,7 @@ int update_screen(void)
   }
 
   // if the screen was scrolled up when displaying a message, scroll it down
-  if ((msg_scrolled || msg_grid_invalid) && !cmdline_number_prompt()) {
+  if (msg_scrolled || msg_grid_invalid) {
     clear_cmdline = true;
     int valid = MAX(Rows - msg_scrollsize(), 0);
     if (msg_grid.chars) {
@@ -552,7 +550,6 @@ int update_screen(void)
   }
 
   win_ui_flush(true);
-  msg_ext_check_clear();
 
   // reset cmdline_row now (may have been changed temporarily)
   compute_cmdrow();
@@ -568,6 +565,9 @@ int update_screen(void)
     screenclear();  // will reset clear_cmdline
                     // and set UPD_NOT_VALID for each window
     cmdline_screen_cleared();   // clear external cmdline state
+    if (ui_has(kUIMessages)) {
+      ui_call_msg_clear();
+    }
     type = UPD_NOT_VALID;
     // must_redraw may be set indirectly, avoid another redraw later
     must_redraw = 0;
@@ -964,10 +964,6 @@ bool skip_showmode(void)
 int showmode(void)
 {
   int length = 0;
-
-  if (ui_has(kUIMessages) && clear_cmdline) {
-    msg_ext_clear(true);
-  }
 
   // Don't make non-flushed message part of the showmode.
   msg_ext_ui_flush();

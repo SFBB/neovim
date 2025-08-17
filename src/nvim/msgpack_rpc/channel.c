@@ -33,6 +33,8 @@
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 
+#include "msgpack_rpc/channel.c.generated.h"
+
 #ifdef NVIM_LOG_DEBUG
 # define REQ "[request]  "
 # define RES "[response] "
@@ -64,10 +66,6 @@ static void log_notify(char *dir, uint64_t channel_id, const char *name)
 # define log_request(...)
 # define log_response(...)
 # define log_notify(...)
-#endif
-
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "msgpack_rpc/channel.c.generated.h"
 #endif
 
 void rpc_init(void)
@@ -608,6 +606,12 @@ void serialize_response(Channel *channel, MsgpackRpcRequestHandler handler, Mess
 
 static void packer_buffer_init_channels(Channel **chans, size_t nchans, PackerBuffer *packer)
 {
+  for (size_t i = 0; i < nchans; i++) {
+    Channel *chan = chans[i];
+    if (chan->rpc.ui && chan->rpc.ui->incomplete_event) {
+      remote_ui_flush_pending_data(chan->rpc.ui);
+    }
+  }
   packer->startptr = alloc_block();
   packer->ptr = packer->startptr;
   packer->endptr = packer->startptr + ARENA_BLOCK_SIZE;

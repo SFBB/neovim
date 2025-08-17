@@ -47,9 +47,7 @@
 #include "nvim/types_defs.h"
 #include "nvim/window.h"
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "lua/stdlib.c.generated.h"
-#endif
+#include "lua/stdlib.c.generated.h"
 
 static int regex_match(lua_State *lstate, regprog_T **prog, char *str)
 {
@@ -761,8 +759,9 @@ void nlua_state_add_stdlib(lua_State *const lstate, bool is_thread)
   lua_setfield(lstate, -2, "lpeg");
   lua_pop(lstate, 4);
 
-  // vim.diff
+  // vim.text.diff
   lua_pushcfunction(lstate, &nlua_xdl_diff);
+  // TODO(justinmk): set vim.text.diff here, or rename this to "_diff". goddamnit.
   lua_setfield(lstate, -2, "diff");
 
   // vim.json
