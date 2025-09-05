@@ -344,7 +344,7 @@ static HlMessage format_progress_message(HlMessage hl_msg, MessageData *msg_data
 /// @param kind Message kind (can be NULL to avoid setting kind)
 /// @param history Whether to add message to history
 /// @param err Whether to print message as an error
-/// @param msg_data Additional data for progress messages
+/// @param msg_data Progress-message data
 MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bool err,
                   MessageData *msg_data, bool *needs_msg_clear)
 {
@@ -352,6 +352,7 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   msg_start();
   msg_clr_eos();
   bool need_clear = false;
+  bool hl_msg_updated = false;
   msg_ext_history = history;
   if (kind != NULL) {
     msg_ext_set_kind(kind);
@@ -368,12 +369,14 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
       msg_id_next = id.data.integer + 1;
     }
   }
+  msg_ext_id = id;
 
   // progress message are special displayed as "title: percent% msg"
   if (strequal(kind, "progress") && msg_data) {
     HlMessage formated_message = format_progress_message(hl_msg, msg_data);
     if (formated_message.items != hl_msg.items) {
       *needs_msg_clear = true;
+      hl_msg_updated = true;
       hl_msg = formated_message;
     }
   }
@@ -396,6 +399,10 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   is_multihl = false;
   no_wait_return--;
   msg_end();
+
+  if (hl_msg_updated && !(history && kv_size(hl_msg))) {
+    hl_msg_free(hl_msg);
+  }
   return id;
 }
 
@@ -1161,7 +1168,6 @@ static void msg_hist_add_multihl(MsgID msg_id, HlMessage msg, bool temp, Message
   msg_hist_last = entry;
   msg_ext_history = true;
 
-  msg_ext_id = msg_id;
   msg_hist_clear(msg_hist_max);
 }
 
