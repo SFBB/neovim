@@ -220,7 +220,7 @@ local function buf_apply_graph_lines(tree, graph_lines, buf, meta, find_seq)
         found_seq = #meta
       end
     elseif line then
-      table.insert(extmark_buffer, { { line, 'Comment' } })
+      table.insert(extmark_buffer, { { line, 'Normal' } })
     end
 
     if next(extmark_buffer) and (v.kind == 'node' or is_last) then
@@ -371,9 +371,7 @@ function M.open(opts)
 
   vim.api.nvim_win_set_cursor(w, { vim.api.nvim_buf_line_count(b), 0 })
 
-  local group = vim.api.nvim_create_augroup('nvim.undotree', { clear = false })
-  vim.api.nvim_clear_autocmds({ buffer = b })
-  vim.api.nvim_clear_autocmds({ buffer = buf })
+  local group = vim.api.nvim_create_augroup('nvim.undotree', {})
 
   vim.api.nvim_win_call(w, function()
     vim.cmd.syntax('region Comment start="(" end=")"')
