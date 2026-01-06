@@ -492,6 +492,14 @@ static bool can_unload_buffer(buf_T *buf)
   return can_unload;
 }
 
+void buf_close_terminal(buf_T *buf)
+{
+  assert(buf->terminal);
+  buf->b_locked++;
+  terminal_close(&buf->terminal, -1);
+  buf->b_locked--;
+}
+
 /// Close the link to a buffer.
 ///
 /// @param win    If not NULL, set b_last_cursor.
@@ -640,12 +648,6 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
     return true;
   }
 
-  if (buf->terminal) {
-    buf->b_locked++;
-    terminal_close(&buf->terminal, -1);
-    buf->b_locked--;
-  }
-
   // Always remove the buffer when there is no file name.
   if (buf->b_ffname == NULL) {
     del_buf = true;
@@ -668,6 +670,18 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   }
 
   buf->b_nwindows = nwindows;
+
+  if (buf->terminal) {
+    buf->b_locked_split++;
+    buf_close_terminal(buf);
+    buf->b_locked_split--;
+
+    // Must check this before calling buf_freeall(), otherwise is_curbuf will be true
+    // in buf_freeall() but still false here, leading to a 0-line buffer.
+    if (buf == curbuf && !is_curbuf) {
+      return false;
+    }
+  }
 
   buf_freeall(buf, ((del_buf ? BFA_DEL : 0)
                     + (wipe_buf ? BFA_WIPE : 0)
@@ -1370,9 +1384,8 @@ static int do_buffer_ext(int action, int start, int dir, int count, int flags)
           return FAIL;
         }
       } else {
-        semsg(_("E89: No write since last change for buffer %" PRId64
-                " (add ! to override)"),
-              (int64_t)buf->b_fnum);
+        semsg(_("E89: No write since last change for buffer %d (add ! to override)"),
+              buf->b_fnum);
         return FAIL;
       }
     }
@@ -2170,7 +2183,7 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
     if ((options & GETF_ALT) && n == 0) {
       emsg(_(e_noalt));
     } else {
-      semsg(_("E92: Buffer %" PRId64 " not found"), (int64_t)n);
+      semsg(_(e_buffer_nr_not_found), n);
     }
     return FAIL;
   }
