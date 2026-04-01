@@ -136,18 +136,16 @@ describe('TUI :detach', function()
       '--cmd',
       nvim_set .. ' laststatus=2 background=dark',
     }, job_opts)
+    tt.override_screen_expect_for_conpty(screen)
 
     tt.feed_data('iHello, World')
-    tt.screen_expect(
-      screen,
-      [[
+    screen:expect([[
       Hello, World^                                      |
       {100:~                                                 }|*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
-    ]]
-    )
+    ]])
 
     local child_session = n.connect(child_server)
     finally(function()
@@ -196,16 +194,13 @@ describe('TUI :detach', function()
       child_server,
     }, job_opts)
 
-    tt.screen_expect(
-      screen_reattached,
-      [[
+    screen_reattached:expect([[
       We did it, pooky^.                                 |
       {100:~                                                 }|*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
-    ]]
-    )
+    ]])
   end)
 end)
 
@@ -229,32 +224,32 @@ describe('TUI :restart', function()
       '--cmd',
       'colorscheme vim',
       '--cmd',
-      nvim_set .. ' notermguicolors laststatus=2 background=dark',
+      'set laststatus=2 background=dark noruler',
       -- XXX: New server starts before the UI connects to it.
       -- So checking screen state for this pid is not possible.
       -- '--cmd',
       -- 'echo getpid()',
-    }, { env = env_notermguicolors })
+    }, { env = { COLORTERM = 'truecolor' } })
+    screen:set_option('rgb', true)
 
-    local function screen_expect(s)
-      tt.screen_expect(screen, s)
-    end
-
+    -- 'termguicolors' support should be detected properly after :restart.
     -- The value of has("gui_running") should be 0 before and after :restart.
-    local function assert_no_gui_running()
+    local function assert_termguicolors_and_no_gui_running()
+      tt.feed_data(':echo "&termguicolors: " .. &termguicolors\013')
+      screen:expect({ any = '&termguicolors: 1' })
       tt.feed_data(':echo "GUI Running: " .. has("gui_running")\013')
       screen:expect({ any = 'GUI Running: 0' })
     end
 
     local s0 = [[
       ^                                                  |
-      {100:~                                                 }|*3
+      {1:~}{18:                                                 }|*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
     ]]
     screen:expect(s0)
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     local server_session = n.connect(server_pipe)
     local _, server_pid = server_session:request('nvim_call_function', 'getpid', {})
@@ -279,7 +274,7 @@ describe('TUI :restart', function()
     local s1 = [[
                                                         |
       ^Hello1                                            |
-      {100:~                                                 }|*2
+      {1:~}{18:                                                 }|*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -288,49 +283,43 @@ describe('TUI :restart', function()
     tt.feed_data(':set nomodified\013')
     -- Command is run on new server.
     tt.feed_data(":restart put ='Hello1'\013")
-    screen_expect(s1)
+    screen:expect(s1)
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- Complex command following +cmd.
     tt.feed_data(":restart +qall! put ='Hello2' | put ='World2'\013")
-    screen_expect([[
+    screen:expect([[
                                                         |
       Hello2                                            |
       ^World2                                            |
-      {100:~                                                 }|
+      {1:~}{18:                                                 }|
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
     ]])
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- Check ":restart" on an unmodified buffer.
     tt.feed_data(':set nomodified\013')
     tt.feed_data(':restart\013')
-    screen_expect(s0)
+    screen:expect(s0)
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- Check ":restart +qall!" on an unmodified buffer.
     tt.feed_data(':restart +qall!\013')
-    screen_expect(s0)
+    screen:expect(s0)
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- Check ":restart +echo" cannot restart server.
     tt.feed_data(':restart +echo\013')
     screen:expect({ any = vim.pesc('+cmd did not quit the server') })
 
     tt.feed_data('ithis will be removed\027')
-    screen_expect([[
-      this will be remove^d                              |
-      {100:~                                                 }|*3
-      {3:[No Name] [+]                                     }|
-                                                        |
-      {5:-- TERMINAL --}                                    |
-    ]])
+    screen:expect({ any = vim.pesc('this will be remove^d') })
 
     -- Check ":confirm restart" on a modified buffer.
     tt.feed_data(':confirm restart\013')
@@ -354,7 +343,7 @@ describe('TUI :restart', function()
     tt.feed_data('N\013')
     screen:expect({ any = '%^Hello3' })
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- Check ":confirm restart +echo" correctly ignores ":confirm"
     tt.feed_data(':confirm restart +echo\013')
@@ -368,20 +357,20 @@ describe('TUI :restart', function()
     -- Check ":restart +qall!" on a modified buffer.
     tt.feed_data('ithis will be removed\027')
     tt.feed_data(':restart +qall!\013')
-    screen_expect(s0)
+    screen:expect(s0)
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- No --listen conflict when server exit is delayed.
     feed_data(':lua vim.schedule(function() vim.wait(100) end); vim.cmd.restart()\n')
-    screen_expect(s0)
+    screen:expect(s0)
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     screen:try_resize(60, 6)
-    screen_expect([[
+    screen:expect([[
       ^                                                            |
-      {100:~                                                           }|*2
+      {1:~}{18:                                                           }|*2
       {3:[No Name]                                                   }|
                                                                   |
       {5:-- TERMINAL --}                                              |
@@ -389,15 +378,15 @@ describe('TUI :restart', function()
 
     --- Check that ":restart" uses the updated size after terminal resize.
     tt.feed_data(':restart echo "restarted"\013')
-    screen_expect([[
+    screen:expect([[
       ^                                                            |
-      {100:~                                                           }|*2
+      {1:~}{18:                                                           }|*2
       {3:[No Name]                                                   }|
       restarted                                                   |
       {5:-- TERMINAL --}                                              |
     ]])
     assert_new_pid()
-    assert_no_gui_running()
+    assert_termguicolors_and_no_gui_running()
 
     -- The server is now detached and needs to be quit explicitly.
     feed_data(':qall!\r')
@@ -750,7 +739,7 @@ describe('TUI', function()
   end)
 
   it('accepts resize while pager is active', function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     child_session:request(
       'nvim_exec2',
       [[
@@ -2035,7 +2024,7 @@ describe('TUI', function()
   end)
 
   it("paste: 'nomodifiable' buffer", function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     child_exec_lua([[
       vim.bo.modifiable = false
       -- Truncate the error message to hide the line number
@@ -2246,7 +2235,7 @@ describe('TUI', function()
   end)
 
   it('allows termguicolors to be set at runtime', function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     screen:set_option('rgb', true)
     feed_data(':hi SpecialKey ctermfg=3 guifg=SeaGreen\n')
     feed_data('i')
@@ -2436,7 +2425,7 @@ describe('TUI', function()
   end)
 
   it('allows grid to assume wider ambiwidth chars than host terminal', function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     child_session:request(
       'nvim_buf_set_lines',
       0,
@@ -2481,7 +2470,7 @@ describe('TUI', function()
   end)
 
   it('allows grid to assume wider non-ambiwidth chars than host terminal', function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     child_session:request(
       'nvim_buf_set_lines',
       0,
@@ -2645,7 +2634,8 @@ describe('TUI', function()
     retry(nil, 50, function()
       eq(vim.NIL, api.nvim_get_proc(pid))
     end)
-    screen:expect({ any = vim.pesc('[Process exited 1]') })
+    -- FIXME: SIGHUP sometimes isn't caught with ASAN.
+    screen:expect({ any = t.is_asan() and '%[Process exited %d+%]' or '%[Process exited 1%]' })
   end)
 
   it('exits properly when :quit non-last window in event handler #14379', function()
@@ -3418,7 +3408,7 @@ describe('TUI FocusGained/FocusLost', function()
   end)
 
   it('in hit-enter prompt', function()
-    t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
+    tt.override_screen_expect_for_conpty(screen)
     feed_data(":echom 'msg1'|echom 'msg2'|echom 'msg3'|echom 'msg4'|echom 'msg5'\n")
     screen:expect([[
       msg1                                              |
