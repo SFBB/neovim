@@ -449,6 +449,9 @@ Integer nvim_create_autocmd(uint64_t channel_id, Object event, Dict(create_autoc
   if (ERROR_SET(err)) {
     goto cleanup;
   }
+  VALIDATE(patterns.size > 0, "%s", "No non-empty patterns specified", {
+    goto cleanup;
+  });
 
   if (HAS_KEY(opts, create_autocmd, desc)) {
     desc = opts->desc.data;
@@ -558,7 +561,7 @@ void nvim_clear_autocmds(Dict(clear_autocmds) *opts, Arena *arena, Error *err)
   }
 
   // If we didn't pass any events, that means clear all events.
-  if (event_array.size == 0) {
+  if (opts->event.type == kObjectTypeNil) {
     FOR_ALL_AUEVENTS(event) {
       FOREACH_ITEM(patterns, pat_object, {
         char *pat = pat_object.data.string.data;
@@ -657,7 +660,7 @@ void nvim_del_augroup_by_name(String name, Error *err)
 /// @param event Event(s) to execute.
 /// @param opts Optional filters:
 ///        - group (`string|integer?`) Group name or id to match against. |autocmd-groups|.
-///        - pattern (`string|array?`, default: "*") |autocmd-pattern|. Not allowed with {buffer}.
+///        - pattern (`string|array?`, default: current file name) |autocmd-pattern|. Not allowed with {buffer}.
 ///        - buffer (`integer?`) Buffer id |autocmd-buflocal|. Not allowed with {pattern}.
 ///        - modeline (`boolean?`, default: true) Process the modeline after the autocommands
 ///          [<nomodeline>].
@@ -753,7 +756,8 @@ static Array unpack_string_or_array(Object v, char *k, bool required, Arena *are
     }
     return v.data.array;
   } else {
-    VALIDATE_EXP(!required, k, "Array or String", api_typename(v.type), {
+    VALIDATE_EXP(!required && v.type == kObjectTypeNil, k, "Array or String", api_typename(v.type),
+    {
       return (Array)ARRAY_DICT_INIT;
     });
   }
@@ -830,9 +834,7 @@ static Array get_patterns_from_pattern_or_buf(Object pattern, bool has_buffer, B
     }
 
     kvi_push(patterns, STRING_OBJ(arena_printf(arena, "<buffer=%d>", (int)buf->handle)));
-  }
-
-  if (kv_size(patterns) == 0 && fallback) {
+  } else if (fallback) {
     kvi_push(patterns, CSTR_AS_OBJ(fallback));
   }
 

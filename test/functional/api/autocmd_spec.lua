@@ -38,6 +38,12 @@ describe('autocmd api', function()
           command = 'ls',
         })
       )
+      matches(
+        "Invalid 'event': expected Array or String, got nil$",
+        pcall_err(exec_lua, function()
+          vim.api.nvim_create_autocmd(nil, {})
+        end)
+      )
       eq("Required: 'command' or 'callback'", pcall_err(api.nvim_create_autocmd, 'FileType', {}))
       eq(
         "Invalid 'desc': expected String, got Integer",
@@ -76,6 +82,41 @@ describe('autocmd api', function()
       eq(
         "Invalid 'event': 'BufAdd,BufDelete'",
         pcall_err(api.nvim_create_autocmd, 'BufAdd,BufDelete', { command = '' })
+      )
+
+      eq(
+        'No non-empty patterns specified',
+        pcall_err(api.nvim_create_autocmd, 'VimEnter', { pattern = '', command = '' })
+      )
+      eq(
+        'No non-empty patterns specified',
+        pcall_err(api.nvim_create_autocmd, 'VimEnter', { pattern = ',', command = '' })
+      )
+      eq(
+        'No non-empty patterns specified',
+        pcall_err(api.nvim_create_autocmd, 'VimEnter', { pattern = {}, command = '' })
+      )
+      eq(
+        'No non-empty patterns specified',
+        pcall_err(api.nvim_create_autocmd, 'VimEnter', { pattern = { '' }, command = '' })
+      )
+      eq(
+        'No non-empty patterns specified',
+        pcall_err(api.nvim_create_autocmd, 'VimEnter', { pattern = { ',,' }, command = '' })
+      )
+      -- OK when at least one non-empty pattern is given.
+      api.nvim_create_autocmd('VimEnter', { pattern = 'hi,,', command = '' })
+      api.nvim_create_autocmd('VimEnter', { pattern = { ',', 'bye' }, command = '' })
+      eq(
+        { 'hi', 'bye' },
+        exec_lua(function()
+          return vim
+            .iter(vim.api.nvim_get_autocmds({ event = 'VimEnter' }))
+            :map(function(ev)
+              return ev.pattern
+            end)
+            :totable()
+        end)
       )
     end)
 
@@ -1020,6 +1061,12 @@ describe('autocmd api', function()
         "Invalid 'event' item: expected String, got Array",
         pcall_err(api.nvim_exec_autocmds, { 'FileType', {} }, {})
       )
+      matches(
+        "Invalid 'event': expected Array or String, got nil$",
+        pcall_err(exec_lua, function()
+          vim.api.nvim_exec_autocmds(nil, {})
+        end)
+      )
     end)
 
     it('can trigger builtin autocmds', function()
@@ -1053,6 +1100,25 @@ describe('autocmd api', function()
 
       api.nvim_exec_autocmds('BufReadPre', { pattern = { 'foo', 'bar', 'baz', 'frederick' } })
       eq(22, api.nvim_get_var('autocmd_executed'))
+
+      eq('', api.nvim_buf_get_name(0))
+      api.nvim_exec_autocmds({ 'BufReadPre', 'BufReadPost' }, {})
+      eq(23, api.nvim_get_var('autocmd_executed'))
+
+      api.nvim_buf_set_name(0, 'bar')
+      api.nvim_exec_autocmds({ 'BufReadPre', 'BufReadPost' }, {})
+      eq(34, api.nvim_get_var('autocmd_executed'))
+
+      -- Empty event array matches (and executes) nothing.
+      api.nvim_exec_autocmds({}, {})
+      eq(34, api.nvim_get_var('autocmd_executed'))
+
+      -- Non-nil, fully-empty patterns execute nothing.
+      api.nvim_exec_autocmds('BufReadPre', { pattern = '' })
+      api.nvim_exec_autocmds('BufReadPre', { pattern = ',,,,' })
+      api.nvim_exec_autocmds('BufReadPre', { pattern = {} })
+      api.nvim_exec_autocmds('BufReadPre', { pattern = { ',', '' } })
+      eq(34, api.nvim_get_var('autocmd_executed'))
     end)
 
     it('can pass the buffer', function()
@@ -1546,6 +1612,16 @@ describe('autocmd api', function()
           event = { 'FileType', {} },
         })
       )
+      eq(
+        "Invalid 'event': expected Array or String, got Integer",
+        pcall_err(api.nvim_clear_autocmds, { event = 1337 })
+      )
+      matches(
+        "Invalid 'event': expected Array or String, got Function$",
+        pcall_err(exec_lua, function()
+          vim.api.nvim_clear_autocmds({ event = function() end })
+        end)
+      )
       eq("Invalid 'group': 0", pcall_err(api.nvim_clear_autocmds, { group = 0 }))
     end)
 
@@ -1576,6 +1652,10 @@ describe('autocmd api', function()
       local before_delete = api.nvim_get_autocmds(search)
       eq(2, #before_delete)
 
+      -- Like nvim_exec_autocmds(), empty event array matches (and clears) nothing.
+      api.nvim_clear_autocmds({ event = {} })
+      eq(2, #api.nvim_get_autocmds(search))
+
       api.nvim_clear_autocmds(search)
       local after_delete = api.nvim_get_autocmds(search)
       eq(0, #after_delete)
@@ -1600,6 +1680,15 @@ describe('autocmd api', function()
 
       local after_delete_events = api.nvim_get_autocmds { event = { 'InsertEnter', 'InsertLeave' } }
       eq(2, #after_delete_events)
+
+      -- Non-nil, fully-empty patterns clear nothing.
+      local event_count = #api.nvim_get_autocmds {}
+      api.nvim_clear_autocmds({ pattern = '' })
+      api.nvim_clear_autocmds({ pattern = ',,,' })
+      api.nvim_clear_autocmds({ pattern = {} })
+      api.nvim_clear_autocmds({ pattern = { '', '' } })
+      api.nvim_clear_autocmds({ pattern = { ',', ',,' } })
+      eq(event_count, #api.nvim_get_autocmds {})
     end)
 
     it('should allow clearing by buffer', function()
