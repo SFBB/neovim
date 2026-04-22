@@ -1944,11 +1944,8 @@ static void ins_compl_files(int count, char **files, bool thesaurus, int flags,
   for (int i = 0; i < count && !got_int && !ins_compl_interrupted(); i++) {
     FILE *fp = os_fopen(files[i], "r");  // open dictionary file
     if (flags != DICT_EXACT && !shortmess(SHM_COMPLETIONSCAN) && !compl_autocomplete) {
-      msg_hist_off = true;  // reset in msg_trunc()
-      msg_ext_set_kind("completion");
-      vim_snprintf(IObuff, IOSIZE,
-                   _("Scanning dictionary: %s"), files[i]);
-      msg_trunc(IObuff, true, HLF_R);
+      vim_snprintf(IObuff, IOSIZE, _("Scanning dictionary: %s"), files[i]);
+      msg_progress(IObuff, "completion", "running", HLF_R, false, true);
     }
 
     if (fp == NULL) {
@@ -2715,7 +2712,7 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
   }
   compl_autocomplete = false;
   compl_from_nonkeyword = false;
-  compl_best_matches = 0;
+  compl_num_bests = 0;
   compl_ins_end_col = 0;
 
   if (c == Ctrl_C && cmdwin_type != 0) {
@@ -3823,16 +3820,13 @@ static int process_next_cpt_value(ins_compl_next_state_T *st, int *compl_type_ar
       st->dict_f = DICT_EXACT;
     }
     if (!shortmess(SHM_COMPLETIONSCAN) && !compl_autocomplete) {
-      msg_hist_off = true;  // reset in msg_trunc()
-      msg_ext_overwrite = true;
-      msg_ext_set_kind("completion");
       vim_snprintf(IObuff, IOSIZE, _("Scanning: %s"),
                    st->ins_buf->b_fname == NULL
                    ? buf_spname(st->ins_buf)
                    : st->ins_buf->b_sfname == NULL
                    ? st->ins_buf->b_fname
                    : st->ins_buf->b_sfname);
-      msg_trunc(IObuff, true, HLF_R);
+      msg_progress(IObuff, "completion", "running", HLF_R, false, true);
     }
   } else if (*st->e_cpt == NUL) {
     status = INS_COMPL_CPT_END;
@@ -3865,11 +3859,8 @@ static int process_next_cpt_value(ins_compl_next_state_T *st, int *compl_type_ar
       } else if (*st->e_cpt == ']' || *st->e_cpt == 't') {
         compl_type = CTRL_X_TAGS;
         if (!shortmess(SHM_COMPLETIONSCAN) && !compl_autocomplete) {
-          msg_ext_set_kind("completion");
-          msg_hist_off = true;  // reset in msg_trunc()
-          msg_ext_overwrite = true;
           vim_snprintf(IObuff, IOSIZE, "%s", _("Scanning tags."));
-          msg_trunc(IObuff, true, HLF_R);
+          msg_progress(IObuff, "completion", "running", HLF_R, false, true);
         }
       }
     }
@@ -5074,7 +5065,8 @@ static char *find_common_prefix(size_t *prefix_len, bool curbuf_only)
       }
 
       if (!match_limit_exceeded
-          && (!curbuf_only || cpt_sources_array[cur_source].cs_flag == '.')) {
+          && (!curbuf_only || (cur_source != -1
+                               && cpt_sources_array[cur_source].cs_flag == '.'))) {
         if (first == NULL && strncmp(ins_compl_leader(), compl->cp_str.data,
                                      ins_compl_leader_len()) == 0) {
           first = compl->cp_str.data;
@@ -5307,8 +5299,7 @@ static int find_next_completion_match(bool allow_get_expansion, int todo, bool a
         if (compl_pending > 0 && compl_shown_match->cp_next != NULL) {
           compl_shown_match = compl_shown_match->cp_next;
           compl_pending--;
-        }
-        if (compl_pending < 0 && compl_shown_match->cp_prev != NULL) {
+        } else if (compl_pending < 0 && compl_shown_match->cp_prev != NULL) {
           compl_shown_match = compl_shown_match->cp_prev;
           compl_pending++;
         } else {
